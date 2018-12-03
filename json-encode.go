@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
 	"reflect"
 	"time"
 
@@ -38,6 +39,13 @@ func (cdc *Codec) encodeReflectJSON(w io.Writer, info *TypeInfo, rv reflect.Valu
 	// Write null if necessary.
 	if isNilPtr {
 		err = writeStr(w, `null`)
+		return
+	}
+
+	// Encode big.Int:
+	if rv.Type() == reflect.TypeOf(big.Int{}) {
+		i := rv.Interface().(big.Int)
+		_, err = fmt.Fprintf(w, `"%s"`, (&i).String()) // JS can't handle big.Int
 		return
 	}
 

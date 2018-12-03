@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,7 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/go-amino"
+	"github.com/MinterTeam/go-amino"
 )
 
 func registerTransports(cdc *amino.Codec) {
@@ -101,6 +102,9 @@ func TestMarshalJSON(t *testing.T) {
 		}{FP: &fp{"Foo", 10}, Package: "bytes"},
 			`{"FP":<FP-MARSHALJSON>,"Package":"bytes"}`, "",
 		}, // #23,
+		{
+			struct{ A *big.Int }{A: big.NewInt(10)}, `{"A":"10"}`, "",
+		}, // #24
 	}
 
 	for i, tt := range cases {
