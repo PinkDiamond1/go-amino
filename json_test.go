@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/go-amino"
+	amino "github.com/tendermint/go-amino"
 )
 
 func registerTransports(cdc *amino.Codec) {
@@ -43,7 +43,7 @@ func TestMarshalJSON(t *testing.T) {
 		{&oneExportedField{A: "Z"}, `{"A":"Z"}`, ""},         // #6
 		{[]string{"a", "bc"}, `["a","bc"]`, ""},              // #7
 		{[]interface{}{"a", "bc", 10, 10.93, 1e3},
-			``, "Unregistered"}, // #8
+			``, "unregistered"}, // #8
 		{aPointerField{Foo: new(int), Name: "name"},
 			`{"Foo":"0","nm":"name"}`, ""}, // #9
 		{
@@ -91,7 +91,7 @@ func TestMarshalJSON(t *testing.T) {
 
 		// We don't yet support interface pointer registration i.e. `*interface{}`
 		{
-			interfacePtr("a"), "", "Unregistered interface interface {}",
+			interfacePtr("a"), "", "unregistered interface interface {}",
 		}, // #20
 		{&fp{"Foo", 10}, "<FP-MARSHALJSON>", ""}, // #21
 		{(*fp)(nil), "null", ""},                 // #22
@@ -172,33 +172,18 @@ type innerFP struct {
 }
 
 func TestUnmarshalMap(t *testing.T) {
-	binBytes := []byte(`dontcare`)
-	jsonBytes := []byte(`{"2": 2}`)
 	obj := new(map[string]int)
 	cdc := amino.NewCodec()
-	// Binary doesn't support decoding to a map...
-	assert.Panics(t, func() {
-		err := cdc.UnmarshalBinaryLengthPrefixed(binBytes, &obj)
-		assert.Fail(t, "should have paniced but got err: %v", err)
-	})
-	assert.Panics(t, func() {
-		err := cdc.UnmarshalBinaryLengthPrefixed(binBytes, obj)
-		assert.Fail(t, "should have paniced but got err: %v", err)
-	})
-	// ... nor encoding it.
-	assert.Panics(t, func() {
-		bz, err := cdc.MarshalBinaryLengthPrefixed(obj)
-		assert.Fail(t, "should have paniced but got bz: %X err: %v", bz, err)
-	})
-	// JSON doesn't support decoding to a map...
-	assert.Panics(t, func() {
-		err := cdc.UnmarshalJSON(jsonBytes, &obj)
-		assert.Fail(t, "should have paniced but got err: %v", err)
-	})
-	assert.Panics(t, func() {
-		err := cdc.UnmarshalJSON(jsonBytes, obj)
-		assert.Fail(t, "should have paniced but got err: %v", err)
-	})
+
+	invalidJSONMapBytes := []byte(`{"some_key": 2}`)
+	// we expect quoted values for javascript / JSON numbers:
+	err := cdc.UnmarshalJSON(invalidJSONMapBytes, &obj)
+	assert.Error(t, err)
+
+	validJSONMapBytes := []byte(`{"some_key": "2"}`)
+	err = cdc.UnmarshalJSON(validJSONMapBytes, obj)
+	assert.NoError(t, err)
+
 	// ... nor encoding it.
 	assert.Panics(t, func() {
 		bz, err := cdc.MarshalJSON(obj)
@@ -207,33 +192,18 @@ func TestUnmarshalMap(t *testing.T) {
 }
 
 func TestUnmarshalFunc(t *testing.T) {
-	binBytes := []byte(`dontcare`)
 	jsonBytes := []byte(`"dontcare"`)
 	obj := func() {}
 	cdc := amino.NewCodec()
-	// Binary doesn't support decoding to a func...
-	assert.Panics(t, func() {
-		err := cdc.UnmarshalBinaryLengthPrefixed(binBytes, &obj)
-		assert.Fail(t, "should have paniced but got err: %v", err)
-	})
-	assert.Panics(t, func() {
-		err := cdc.UnmarshalBinaryLengthPrefixed(binBytes, obj)
-		assert.Fail(t, "should have paniced but got err: %v", err)
-	})
-	// ... nor encoding it.
-	assert.Panics(t, func() {
-		bz, err := cdc.MarshalBinaryLengthPrefixed(obj)
-		assert.Fail(t, "should have paniced but got bz: %X err: %v", bz, err)
-	})
-	// JSON doesn't support decoding to a func...
 	assert.Panics(t, func() {
 		err := cdc.UnmarshalJSON(jsonBytes, &obj)
 		assert.Fail(t, "should have paniced but got err: %v", err)
 	})
-	assert.Panics(t, func() {
-		err := cdc.UnmarshalJSON(jsonBytes, obj)
-		assert.Fail(t, "should have paniced but got err: %v", err)
-	})
+
+	err := cdc.UnmarshalJSON(jsonBytes, obj)
+	// UnmarshalJSON expects a pointer
+	assert.Error(t, err)
+
 	// ... nor encoding it.
 	assert.Panics(t, func() {
 		bz, err := cdc.MarshalJSON(obj)
@@ -251,7 +221,7 @@ func TestUnmarshalJSON(t *testing.T) {
 		wantErr string
 	}{
 		{ // #0
-			`null`, 2, nil, "expects a pointer",
+			`null`, 2, nil, "expected a pointer",
 		},
 		{ // #1
 			`null`, new(int), new(int), "",
@@ -290,7 +260,7 @@ func TestUnmarshalJSON(t *testing.T) {
 		},
 		{ // #9
 			`[1, "2", ["foo", "bar"]]`,
-			new([]interface{}), nil, "Unregistered",
+			new([]interface{}), nil, "unregistered interface interface {}",
 		},
 		{ // #10
 			`2.34`, floatPtr(2.34), nil, "float* support requires",
@@ -394,6 +364,7 @@ func TestJSONCodecRoundTrip(t *testing.T) {
 
 		// Now check that the input is exactly equal to the output
 		uBlob, err := cdc.MarshalJSON(tt.out)
+		assert.NoError(t, err)
 		if err := cdc.UnmarshalJSON(mBlob, tt.out); err != nil {
 			t.Errorf("#%d: unexpected error after second MarshalJSON: %v", i, err)
 			continue
@@ -422,9 +393,7 @@ type noExportedFields struct {
 }
 
 type oneExportedField struct {
-	_Foo int
-	A    string
-	b    string
+	A string
 }
 
 type aPointerField struct {
@@ -560,7 +529,7 @@ func TestMarshalJSONMap(t *testing.T) {
 		Map2nil:   (map[string]SimpleStruct)(nil),
 		Map2empty: map[string]SimpleStruct{},
 
-		Map3:      map[string]*SimpleStruct{"foo": &SimpleStruct{Foo: 1, Bar: []byte("bar")}},
+		Map3:      map[string]*SimpleStruct{"foo": {Foo: 1, Bar: []byte("bar")}},
 		Map3nil:   (map[string]*SimpleStruct)(nil),
 		Map3empty: map[string]*SimpleStruct{},
 
@@ -581,7 +550,7 @@ func TestMarshalJSONMap(t *testing.T) {
 		Map2nil:   map[string]SimpleStruct{},
 		Map2empty: map[string]SimpleStruct{},
 
-		Map3:      map[string]*SimpleStruct{"foo": &SimpleStruct{Foo: 1, Bar: []byte("bar")}},
+		Map3:      map[string]*SimpleStruct{"foo": {Foo: 1, Bar: []byte("bar")}},
 		Map3nil:   map[string]*SimpleStruct{},
 		Map3empty: map[string]*SimpleStruct{},
 
