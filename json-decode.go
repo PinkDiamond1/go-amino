@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"reflect"
 
 	"github.com/pkg/errors"
@@ -45,6 +46,17 @@ func (cdc *Codec) decodeReflectJSON(bz []byte, info *TypeInfo, rv reflect.Value,
 			rv.Set(newPtr)
 		}
 		rv = rv.Elem()
+	}
+
+	// Decode big.Int:
+	if rv.Type() == reflect.TypeOf(big.Int{}) {
+		if bz[0] != '"' || bz[len(bz)-1] != '"' {
+			err = fmt.Errorf("invalid character -- Amino:JSON int/int64/uint/uint64/big.Int expects quoted values for javascript numeric support, got: %v.", string(bz))
+			if err != nil {
+				return
+			}
+		}
+		bz = bz[1 : len(bz)-1]
 	}
 
 	// Special case:
